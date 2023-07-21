@@ -1,0 +1,3 @@
+[submodule "CustomApps"]
+	path = CustomApps
+	url = https://github.com/lustosa-leandro/nuttx-custom-apps.git
