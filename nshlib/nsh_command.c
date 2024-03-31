@@ -26,6 +26,7 @@
 
 #include <string.h>
 #include <assert.h>
+#include <stdlib.h>
 
 #ifdef CONFIG_NSH_BUILTIN_APPS
 #  include <nuttx/lib/builtin.h>
@@ -89,6 +90,10 @@ static int  cmd_false(FAR struct nsh_vtbl_s *vtbl, int argc,
 
 #ifndef CONFIG_NSH_DISABLE_EXIT
 static int  cmd_exit(FAR struct nsh_vtbl_s *vtbl, int argc, FAR char **argv);
+#endif
+
+#ifndef CONFIG_NSH_DISABLE_EXPR
+static int cmd_expr(FAR struct nsh_vtbl_s *vtbl, int argc, FAR char **argv);
 #endif
 
 static int  cmd_unrecognized(FAR struct nsh_vtbl_s *vtbl, int argc,
@@ -164,7 +169,7 @@ static const struct cmdmap_s g_cmdmap[] =
 #endif
 
 #ifndef CONFIG_NSH_DISABLE_CP
-  CMD_MAP("cp",       cmd_cp,       3, 3, "<source-path> <dest-path>"),
+  CMD_MAP("cp",       cmd_cp,       3, 4, "[-r] <source-path> <dest-path>"),
 #endif
 
 #ifndef CONFIG_NSH_DISABLE_CMP
@@ -177,13 +182,13 @@ static const struct cmdmap_s g_cmdmap[] =
 
 #ifndef CONFIG_NSH_DISABLE_DATE
   CMD_MAP("date",     cmd_date,
-          1, 4, "[-s \"MMM DD HH:MM:SS YYYY\"] [-u]"),
+          1, 4, "[-s \"MMM DD HH:MM:SS YYYY\"] [-u] [+format]"),
 #endif
 
 #ifndef CONFIG_NSH_DISABLE_DD
   CMD_MAP("dd",       cmd_dd,       3, 7,
     "if=<infile> of=<outfile> [bs=<sectsize>] [count=<sectors>] "
-    "[skip=<sectors>] [verify]"),
+    "[skip=<sectors>] [seek=<sectors>] [verify]"),
 #endif
 
 #if defined(CONFIG_NET) && defined(CONFIG_NET_ROUTE) && !defined(CONFIG_NSH_DISABLE_DELROUTE)
@@ -201,7 +206,7 @@ static const struct cmdmap_s g_cmdmap[] =
 #endif
 
 #if defined(CONFIG_SYSLOG_DEVPATH) && !defined(CONFIG_NSH_DISABLE_DMESG)
-  CMD_MAP("dmesg",    cmd_dmesg,    1, 1, NULL),
+  CMD_MAP("dmesg",    cmd_dmesg,    1, 2, "[-c,--clear |-C,--read-clear]"),
 #endif
 
 #ifndef CONFIG_NSH_DISABLE_ECHO
@@ -224,6 +229,11 @@ static const struct cmdmap_s g_cmdmap[] =
 
 #ifndef CONFIG_NSH_DISABLE_EXIT
   CMD_MAP("exit",     cmd_exit,     1, 1, NULL),
+#endif
+
+#ifndef CONFIG_NSH_DISABLE_EXPR
+  CMD_MAP("expr",     cmd_expr,     4, 4,
+    "<operand1> <operator> <operand2>"),
 #endif
 
 #ifndef CONFIG_NSH_DISABLE_EXPORT
@@ -278,7 +288,7 @@ static const struct cmdmap_s g_cmdmap[] =
 #ifdef CONFIG_NET
 #  ifndef CONFIG_NSH_DISABLE_IFCONFIG
   CMD_MAP("ifconfig", cmd_ifconfig, 1, 12,
-    "[interface [address_family] [mtu <len>] | [<ip-address>|dhcp]]"
+    "[interface [mtu <len>]|[address_family] [[add|del] <ip-address>|dhcp]]"
     "[dr|gw|gateway <dr-address>] [netmask <net-mask>|prefixlen <len>] "
     "[dns <dns-address>] [hw <hw-mac>]"),
 #  endif
@@ -303,7 +313,7 @@ static const struct cmdmap_s g_cmdmap[] =
 #ifndef CONFIG_DISABLE_MOUNTPOINT
 #  if defined(CONFIG_DEV_LOOP) && !defined(CONFIG_NSH_DISABLE_LOSETUP)
   CMD_MAP("losetup",  cmd_losetup,  3, 6,
-    "[-d <dev-path>] | [[-o <offset>] [-r] [-s <sect-size>] "
+    "[-d <dev-path>] | [[-o <offset>] [-r] [-b <sect-size>] "
     "<dev-path> <file-path>]"),
 #  endif
 #endif
@@ -320,7 +330,7 @@ static const struct cmdmap_s g_cmdmap[] =
 #  if defined(CONFIG_MTD_LOOP) && !defined(CONFIG_NSH_DISABLE_LOMTD)
   CMD_MAP("lomtd",    cmd_lomtd,    3, 9,
     "[-d <dev-path>] | [[-o <offset>] [-e <erase-size>] "
-    "[-s <sect-size>] <dev-path> <file-path>]]"),
+    "[-b <sect-size>] <dev-path> <file-path>]]"),
 #  endif
 #endif
 
@@ -435,6 +445,10 @@ static const struct cmdmap_s g_cmdmap[] =
 #  endif
 #endif
 
+#if defined(CONFIG_FS_PROCFS) && !defined(CONFIG_NSH_DISABLE_PIDOF)
+  CMD_MAP("pidof",   cmd_pidof, 2, 2, "<name>"),
+#endif
+
 #if defined(CONFIG_PM) && !defined(CONFIG_NSH_DISABLE_PMCONFIG)
   CMD_MAP("pmconfig", cmd_pmconfig, 1, 4,
     "[stay|relax] [normal|idle|standby|sleep] [domain]"),
@@ -483,6 +497,11 @@ static const struct cmdmap_s g_cmdmap[] =
   CMD_MAP("resetcause", cmd_reset_cause, 1, 1, NULL),
 #endif
 
+#if defined(CONFIG_BOARDCTL_IRQ_AFFINITY) && !defined(CONFIG_NSH_DISABLE_IRQ_AFFINITY)
+  CMD_MAP("irqaff", cmd_irq_affinity, 3, 3,
+    "irqaff [IRQ Number] [Core Mask]"),
+#endif
+
 #ifdef NSH_HAVE_DIROPTS
 #  ifndef CONFIG_NSH_DISABLE_RM
   CMD_MAP("rm",       cmd_rm,       2, 3, "[-r] <file-path>"),
@@ -509,8 +528,14 @@ static const struct cmdmap_s g_cmdmap[] =
 #endif
 #endif
 
+#if defined(CONFIG_RPMSG) && !defined(CONFIG_NSH_DISABLE_RPMSG)
+  CMD_MAP("rpmsg",    cmd_rpmsg,    2, 7,
+    "<panic|dump|ping> <path|all>"
+    " [value|times length ack sleep]"),
+#endif
+
 #if defined(CONFIG_RPTUN) && !defined(CONFIG_NSH_DISABLE_RPTUN)
-  CMD_MAP("rptun",    cmd_rptun,    3, 7,
+  CMD_MAP("rptun",    cmd_rptun,    2, 7,
     "<start|stop|reset|panic|dump|ping> <path|all>"
     " [value|times length ack sleep]"),
 #endif
@@ -675,7 +700,7 @@ static inline void help_cmdlist(FAR struct nsh_vtbl_s *vtbl)
         }
     }
 
-  colwidth += 2;
+  colwidth += HELP_TABSIZE;
 
   /* Determine the number of commands to put on one line */
 
@@ -890,7 +915,7 @@ static inline void help_builtins(FAR struct nsh_vtbl_s *vtbl)
       return;
     }
 
-  column_width += 2;
+  column_width += HELP_TABSIZE;
 
   /* Determine the number of commands to put on one line */
 
@@ -913,7 +938,7 @@ static inline void help_builtins(FAR struct nsh_vtbl_s *vtbl)
   nsh_write(vtbl, g_builtin_prompt, strlen(g_builtin_prompt));
   for (i = 0; i < num_builtin_rows; i++)
     {
-      offset = 4;
+      offset = HELP_TABSIZE;
       memset(line, ' ', offset);
 
       for (j = 0, k = i;
@@ -1083,6 +1108,74 @@ static int cmd_exit(FAR struct nsh_vtbl_s *vtbl, int argc, FAR char **argv)
   UNUSED(argv);
 
   nsh_exit(vtbl, 0);
+  return OK;
+}
+#endif
+
+#ifndef CONFIG_NSH_DISABLE_EXPR
+static int cmd_expr(FAR struct nsh_vtbl_s *vtbl, int argc, FAR char **argv)
+{
+  int operand1;
+  int operand2;
+  int result;
+  FAR char *endptr;
+
+  if (argc != 4)
+    {
+      nsh_output(vtbl, "Usage: %s <operand1> <operator> <operand2>\n",
+                 argv[0]);
+      return ERROR;
+    }
+
+  operand1 = strtol(argv[1], &endptr, 0);
+  if (*endptr != '\0')
+    {
+      nsh_output(vtbl, "operand1 invalid\n");
+      return ERROR;
+    }
+
+  operand2 = strtol(argv[3], &endptr, 0);
+  if (*endptr != '\0')
+    {
+      nsh_output(vtbl, "operand2 invalid\n");
+      return ERROR;
+    }
+
+  switch (argv[2][0])
+    {
+      case '+':
+        result = operand1 + operand2;
+        break;
+      case '-':
+        result = operand1 - operand2;
+        break;
+      case '*':
+        result = operand1 * operand2;
+        break;
+      case '/':
+        if (operand2 == 0)
+          {
+            nsh_output(vtbl, "operand2 invalid\n");
+            return ERROR;
+          }
+
+        result = operand1 / operand2;
+        break;
+      case '%':
+        if (operand2 == 0)
+          {
+            nsh_output(vtbl, "operand2 invalid\n");
+            return ERROR;
+          }
+
+        result = operand1 % operand2;
+        break;
+      default:
+        nsh_output(vtbl, "Unknown operator\n");
+        return ERROR;
+    }
+
+  nsh_output(vtbl, "%d\n", result);
   return OK;
 }
 #endif

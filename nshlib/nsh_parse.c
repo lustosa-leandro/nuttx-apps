@@ -321,10 +321,6 @@ const char g_badcredentials[]    = "\nInvalid username or password\n";
 const char g_loginfailure[]      = "Login failed!\n";
 #endif
 
-/* The NSH prompt */
-
-const char g_nshprompt[]         = CONFIG_NSH_PROMPT_STRING;
-
 /* Common, message formats */
 
 const char g_fmtsyntax[]         = "nsh: %s: syntax error\n";
@@ -1181,15 +1177,15 @@ static FAR char *nsh_aliasexpand(FAR struct nsh_vtbl_s *vtbl,
 
           if ((ptr = strdup(alias->value)) != NULL)
             {
-              /* Set the new command line (expanded alias) */
-
-              cmdline = ptr;
-
               /* Then concatenate the old command line with the new */
 
               ptr = nsh_strcat(vtbl, ptr, " ");
               ptr = nsh_strcat(vtbl, ptr, *saveptr);
               NSH_MEMLIST_ADD(memlist, ptr);
+
+              /* Set the new command line (expanded alias) */
+
+              cmdline = ptr;
 
               /* NULL terminate the new command */
 

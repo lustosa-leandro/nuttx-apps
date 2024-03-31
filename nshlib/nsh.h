@@ -287,20 +287,7 @@
 
 /* Verify support for ROMFS /etc directory support options */
 
-#ifdef CONFIG_NSH_ROMFSETC
-#  ifdef CONFIG_DISABLE_MOUNTPOINT
-#    error "Mountpoint support is disabled"
-#    undef CONFIG_NSH_ROMFSETC
-#  endif
-
-#  ifndef CONFIG_FS_ROMFS
-#    error "ROMFS support not enabled"
-#    undef CONFIG_NSH_ROMFSETC
-#  endif
-
-#  ifndef CONFIG_NSH_ROMFSMOUNTPT
-#    define CONFIG_NSH_ROMFSMOUNTPT "/etc"
-#  endif
+#ifdef CONFIG_ETC_ROMFS
 
 #  ifndef CONFIG_NSH_SYSINITSCRIPT
 #    define CONFIG_NSH_SYSINITSCRIPT "init.d/rc.sysinit"
@@ -311,10 +298,10 @@
 #  endif
 
 #  undef NSH_SYSINITPATH
-#  define NSH_SYSINITPATH CONFIG_NSH_ROMFSMOUNTPT "/" CONFIG_NSH_SYSINITSCRIPT
+#  define NSH_SYSINITPATH CONFIG_ETC_ROMFSMOUNTPT "/" CONFIG_NSH_SYSINITSCRIPT
 
 #  undef NSH_INITPATH
-#  define NSH_INITPATH CONFIG_NSH_ROMFSMOUNTPT "/" CONFIG_NSH_INITSCRIPT
+#  define NSH_INITPATH CONFIG_ETC_ROMFSMOUNTPT "/" CONFIG_NSH_INITSCRIPT
 
 #  ifdef CONFIG_NSH_ROMFSRC
 #    ifndef CONFIG_NSH_RCSCRIPT
@@ -322,30 +309,14 @@
 #    endif
 
 #    undef NSH_RCPATH
-#    define NSH_RCPATH CONFIG_NSH_ROMFSMOUNTPT "/" CONFIG_NSH_RCSCRIPT
+#    define NSH_RCPATH CONFIG_ETC_ROMFSMOUNTPT "/" CONFIG_NSH_RCSCRIPT
 #  endif
-
-#  ifndef CONFIG_NSH_ROMFSDEVNO
-#    define CONFIG_NSH_ROMFSDEVNO 0
-#  endif
-
-#  ifndef CONFIG_NSH_ROMFSSECTSIZE
-#    define CONFIG_NSH_ROMFSSECTSIZE 64
-#  endif
-
-#  define NSECTORS(b)        (((b)+CONFIG_NSH_ROMFSSECTSIZE-1)/CONFIG_NSH_ROMFSSECTSIZE)
-#  define STR_RAMDEVNO(m)    #m
-#  define MKMOUNT_DEVNAME(m) "/dev/ram" STR_RAMDEVNO(m)
-#  define MOUNT_DEVNAME      MKMOUNT_DEVNAME(CONFIG_NSH_ROMFSDEVNO)
 
 #else
 
 #  undef CONFIG_NSH_ROMFSRC
-#  undef CONFIG_NSH_ROMFSMOUNTPT
 #  undef CONFIG_NSH_INITSCRIPT
 #  undef CONFIG_NSH_RCSCRIPT
-#  undef CONFIG_NSH_ROMFSDEVNO
-#  undef CONFIG_NSH_ROMFSSECTSIZE
 
 #endif
 
@@ -491,7 +462,7 @@
 
 #define NSH_HAVE_CPULOAD  1
 #if !defined(CONFIG_FS_PROCFS) || defined(CONFIG_FS_PROCFS_EXCLUDE_CPULOAD) || \
-    !defined(CONFIG_SCHED_CPULOAD) || defined(CONFIG_NSH_DISABLE_PS)
+    defined(CONFIG_SCHED_CPULOAD_NONE) || defined(CONFIG_NSH_DISABLE_PS)
 #  undef NSH_HAVE_CPULOAD
 #endif
 
@@ -571,9 +542,13 @@
 #  undef NSH_HAVE_READFILE
 #endif
 
-/* nsh_foreach_direntry used by the ls and ps and fdinfo commands */
+/* nsh_foreach_direntry used by the commands:
+ * ls, ps, fdinfo, rptun, pmconfig
+ */
 
-#if defined(CONFIG_NSH_DISABLE_LS) && defined(CONFIG_NSH_DISABLE_PS) && defined(CONFIG_NSH_DISABLE_FDINFO)
+#if defined(CONFIG_NSH_DISABLE_LS) && defined(CONFIG_NSH_DISABLE_PS) && \
+    defined(CONFIG_NSH_DISABLE_RPTUN) && defined(CONFIG_NSH_DISABLE_PMCONFIG) && \
+    defined(CONFIG_NSH_DISABLE_FDINFO) && defined(CONFIG_NSH_DISABLE_PIDOF)
 #  undef NSH_HAVE_FOREACH_DIRENTRY
 #endif
 
@@ -773,7 +748,6 @@ extern const char g_loginsuccess[];
 extern const char g_badcredentials[];
 extern const char g_loginfailure[];
 #endif
-extern const char g_nshprompt[];
 extern const char g_fmtsyntax[];
 extern const char g_fmtargrequired[];
 extern const char g_fmtnomatching[];
@@ -800,12 +774,6 @@ extern "C"
 
 /* Initialization */
 
-#ifdef CONFIG_NSH_ROMFSETC
-int nsh_romfsetc(void);
-#else
-#  define nsh_romfsetc() (-ENOSYS)
-#endif
-
 #ifdef HAVE_USB_CONSOLE
 int nsh_usbconsole(void);
 #else
@@ -822,7 +790,7 @@ void nsh_aliasfree(FAR struct nsh_vtbl_s *vtbl,
 #ifndef CONFIG_NSH_DISABLESCRIPT
 int nsh_script(FAR struct nsh_vtbl_s *vtbl, FAR const char *cmd,
                FAR const char *path, bool log);
-#ifdef CONFIG_NSH_ROMFSETC
+#ifdef CONFIG_ETC_ROMFS
 int nsh_sysinitscript(FAR struct nsh_vtbl_s *vtbl);
 int nsh_initscript(FAR struct nsh_vtbl_s *vtbl);
 #ifdef CONFIG_NSH_ROMFSRC
@@ -855,6 +823,11 @@ struct console_stdio_s;
 int nsh_session(FAR struct console_stdio_s *pstate,
                 int login, int argc, FAR char *argv[]);
 int nsh_parse(FAR struct nsh_vtbl_s *vtbl, FAR char *cmdline);
+
+/* Prompt string handling */
+
+FAR const char *nsh_prompt(void);
+void nsh_update_prompt(void);
 
 /****************************************************************************
  * Name: nsh_login
@@ -950,6 +923,9 @@ void nsh_usbtrace(void);
 #endif
 #ifndef CONFIG_NSH_DISABLE_PS
   int cmd_ps(FAR struct nsh_vtbl_s *vtbl, int argc, FAR char **argv);
+#endif
+#if defined(CONFIG_FS_PROCFS) && !defined(CONFIG_NSH_DISABLE_PIDOF)
+  int cmd_pidof(FAR struct nsh_vtbl_s *vtbl, int argc, FAR char **argv);
 #endif
 #if defined(CONFIG_FS_PROCFS) && !defined(CONFIG_NSH_DISABLE_FDINFO)
   int cmd_fdinfo(FAR struct nsh_vtbl_s *vtbl, int argc, FAR char **argv);
@@ -1169,6 +1145,15 @@ int cmd_switchboot(FAR struct nsh_vtbl_s *vtbl, int argc, FAR char **argv);
                       FAR char **argv);
 #endif
 
+#if defined(CONFIG_BOARDCTL_IRQ_AFFINITY) && !defined(CONFIG_NSH_DISABLE_IRQ_AFFINITY)
+  int cmd_irq_affinity(FAR struct nsh_vtbl_s *vtbl, int argc,
+                       FAR char **argv);
+#endif
+
+#if defined(CONFIG_RPMSG) && !defined(CONFIG_NSH_DISABLE_RPMSG)
+  int cmd_rpmsg(FAR struct nsh_vtbl_s *vtbl, int argc, FAR char **argv);
+#endif
+
 #if defined(CONFIG_RPTUN) && !defined(CONFIG_NSH_DISABLE_RPTUN)
   int cmd_rptun(FAR struct nsh_vtbl_s *vtbl, int argc, FAR char **argv);
 #endif
@@ -1374,6 +1359,28 @@ int nsh_writefile(FAR struct nsh_vtbl_s *vtbl, FAR const char *cmd,
 int nsh_foreach_direntry(FAR struct nsh_vtbl_s *vtbl, FAR const char *cmd,
                          FAR const char *dirpath,
                          nsh_direntry_handler_t handler, void *pvarg);
+#endif
+
+/****************************************************************************
+ * Name: nsh_getpid
+ *
+ * Description:
+ *   Obtain pid through process name
+ *
+ * Input Parameters:
+ *   vtbl    - NSH session data
+ *   name    - the name of the process
+ *   pids    - allocated array for storing pid
+ *   count   - the maximum number of pids obtained
+ *
+ * Returned value:
+ *   the actual number of pids obtained
+ *
+ ****************************************************************************/
+
+#if defined(CONFIG_FS_PROCFS) && !defined(CONFIG_NSH_DISABLE_PIDOF)
+ssize_t nsh_getpid(FAR struct nsh_vtbl_s *vtbl, FAR const char *name,
+                   FAR pid_t *pids, size_t count);
 #endif
 
 /****************************************************************************

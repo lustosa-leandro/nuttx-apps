@@ -44,6 +44,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <strings.h>
+#include <sys/param.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
@@ -96,6 +97,7 @@ static int wapi_bitrate_cmd      (int sock, int argc, FAR char **argv);
 static int wapi_txpower_cmd      (int sock, int argc, FAR char **argv);
 static int wapi_scan_results_cmd (int sock, int argc, FAR char **argv);
 static int wapi_scan_cmd         (int sock, int argc, FAR char **argv);
+static int wapi_pscan_cmd        (int sock, int argc, FAR char **argv);
 static int wapi_country_cmd      (int sock, int argc, FAR char **argv);
 static int wapi_sense_cmd        (int sock, int argc, FAR char **argv);
 #ifdef CONFIG_WIRELESS_WAPI_INITCONF
@@ -113,6 +115,7 @@ static const struct wapi_command_s g_wapi_commands[] =
   {"help",         0, 0, NULL},
   {"show",         1, 1, wapi_show_cmd},
   {"scan",         1, 2, wapi_scan_cmd},
+  {"pscan",        1, 2, wapi_pscan_cmd},
   {"scan_results", 1, 1, wapi_scan_results_cmd},
   {"ip",           2, 2, wapi_ip_cmd},
   {"mask",         2, 2, wapi_mask_cmd},
@@ -136,8 +139,6 @@ static const struct wapi_command_s g_wapi_commands[] =
 /****************************************************************************
  * Pre-processor Definitions
  ****************************************************************************/
-
-#define NCOMMANDS (sizeof(g_wapi_commands) / sizeof(struct wapi_command_s))
 
 /* Maximum length of the PASSPHRASE, refer to IEEE802.11i specification */
 
@@ -834,7 +835,8 @@ static int wapi_scan_results_cmd(int sock, int argc, FAR char **argv)
  * Name: wapi_scan_cmd
  *
  * Description:
- *   Scans available APs in the range using given ifname interface.
+ *   Use the given ifname interface and active mode to scan the APs
+ *   available in the range.
  *
  * Returned Value:
  *   None
@@ -850,7 +852,37 @@ static int wapi_scan_cmd(int sock, int argc, FAR char **argv)
 
   /* Start scan */
 
-  ret = wapi_scan_init(sock, argv[0], essid);
+  ret = wapi_escan_init(sock, argv[0], IW_SCAN_TYPE_ACTIVE, essid);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  return wapi_scan_results_cmd(sock, 1, argv);
+}
+
+/****************************************************************************
+ * Name: wapi_pscan_cmd
+ *
+ * Description:
+ *   Use the given ifname interface and passive mode to scan the APs
+ *   available in the range.
+ *
+ * Returned Value:
+ *   None
+ *
+ ****************************************************************************/
+
+static int wapi_pscan_cmd(int sock, int argc, FAR char **argv)
+{
+  FAR const char *essid;
+  int ret;
+
+  essid = argc > 1 ? argv[1] : NULL;
+
+  /* Start scan */
+
+  ret = wapi_escan_init(sock, argv[0], IW_SCAN_TYPE_PASSIVE, essid);
   if (ret < 0)
     {
       return ret;
@@ -1096,6 +1128,7 @@ static void wapi_showusage(FAR const char *progname, int exitcode)
   fprintf(stderr, "Usage:\n");
   fprintf(stderr, "\t%s show         <ifname>\n", progname);
   fprintf(stderr, "\t%s scan         <ifname>\n", progname);
+  fprintf(stderr, "\t%s pscan        <ifname>\n", progname);
   fprintf(stderr, "\t%s scan_results <ifname>\n", progname);
   fprintf(stderr, "\t%s ip           <ifname> <IP address>\n", progname);
   fprintf(stderr, "\t%s mask         <ifname> <mask>\n", progname);
@@ -1200,7 +1233,7 @@ int main(int argc, FAR char *argv[])
   /* Find the command in the g_wapi_command[] list */
 
   wapicmd = NULL;
-  for (i = 0; i < NCOMMANDS; i++)
+  for (i = 0; i < nitems(g_wapi_commands); i++)
     {
       FAR const struct wapi_command_s *cmd = &g_wapi_commands[i];
       if (strcmp(cmdname, cmd->name) == 0)

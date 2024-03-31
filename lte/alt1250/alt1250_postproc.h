@@ -32,7 +32,7 @@
 #include "alt1250_usockif.h"
 
 /****************************************************************************
- * Public Data Type
+ * Public Types
  ****************************************************************************/
 
 typedef CODE int (*postproc_hdlr_t)(FAR struct alt1250_s *dev,
@@ -46,4 +46,4 @@ struct postproc_s
   unsigned long priv;
 };
 
-#endif	/* __APPS_LTE_ALT1250_ALT1250_POSTPROC_H */
+#endif /* __APPS_LTE_ALT1250_ALT1250_POSTPROC_H */

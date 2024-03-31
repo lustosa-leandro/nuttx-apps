@@ -57,6 +57,7 @@
 
 #include <arpa/inet.h>
 #include <netinet/udp.h>
+#include <nuttx/net/ip.h>
 
 #include "netutils/dhcpc.h"
 #include "netutils/netlib.h"
@@ -543,6 +544,7 @@ FAR void *dhcpc_open(FAR const char *interface, FAR const void *macaddr,
        * used by another client.
        */
 
+#if defined(CONFIG_DEV_URANDOM) || defined(CONFIG_DEV_RANDOM)
       ret = getrandom(pdhcpc->xid, 4, 0);
       if (ret != 4)
         {
@@ -552,6 +554,9 @@ FAR void *dhcpc_open(FAR const char *interface, FAR const void *macaddr,
               memcpy(pdhcpc->xid, default_xid, 4);
             }
         }
+#else
+      memcpy(pdhcpc->xid, default_xid, 4);
+#endif
 
       pdhcpc->interface = interface;
       pdhcpc->maclen    = maclen;
@@ -907,26 +912,26 @@ int dhcpc_request(FAR void *handle, FAR struct dhcpc_state *presult)
       return ERROR;
     }
 
-  ninfo("Got IP address %d.%d.%d.%d\n",
-        (int)((presult->ipaddr.s_addr)       & 0xff),
-        (int)((presult->ipaddr.s_addr >> 8)  & 0xff),
-        (int)((presult->ipaddr.s_addr >> 16) & 0xff),
-        (int)((presult->ipaddr.s_addr >> 24) & 0xff));
-  ninfo("Got netmask %d.%d.%d.%d\n",
-        (int)((presult->netmask.s_addr)       & 0xff),
-        (int)((presult->netmask.s_addr >> 8)  & 0xff),
-        (int)((presult->netmask.s_addr >> 16) & 0xff),
-        (int)((presult->netmask.s_addr >> 24) & 0xff));
-  ninfo("Got DNS server %d.%d.%d.%d\n",
-        (int)((presult->dnsaddr.s_addr)       & 0xff),
-        (int)((presult->dnsaddr.s_addr >> 8)  & 0xff),
-        (int)((presult->dnsaddr.s_addr >> 16) & 0xff),
-        (int)((presult->dnsaddr.s_addr >> 24) & 0xff));
-  ninfo("Got default router %d.%d.%d.%d\n",
-        (int)((presult->default_router.s_addr)       & 0xff),
-        (int)((presult->default_router.s_addr >> 8)  & 0xff),
-        (int)((presult->default_router.s_addr >> 16) & 0xff),
-        (int)((presult->default_router.s_addr >> 24) & 0xff));
+  ninfo("Got IP address %u.%u.%u.%u\n",
+        ip4_addr1(presult->ipaddr.s_addr),
+        ip4_addr2(presult->ipaddr.s_addr),
+        ip4_addr3(presult->ipaddr.s_addr),
+        ip4_addr4(presult->ipaddr.s_addr));
+  ninfo("Got netmask %u.%u.%u.%u\n",
+        ip4_addr1(presult->netmask.s_addr),
+        ip4_addr2(presult->netmask.s_addr),
+        ip4_addr3(presult->netmask.s_addr),
+        ip4_addr4(presult->netmask.s_addr));
+  ninfo("Got DNS server %u.%u.%u.%u\n",
+        ip4_addr1(presult->dnsaddr.s_addr),
+        ip4_addr2(presult->dnsaddr.s_addr),
+        ip4_addr3(presult->dnsaddr.s_addr),
+        ip4_addr4(presult->dnsaddr.s_addr));
+  ninfo("Got default router %u.%u.%u.%u\n",
+        ip4_addr1(presult->default_router.s_addr),
+        ip4_addr2(presult->default_router.s_addr),
+        ip4_addr3(presult->default_router.s_addr),
+        ip4_addr4(presult->default_router.s_addr));
   ninfo("Lease expires in %" PRId32 " seconds\n", presult->lease_time);
   return OK;
 }
@@ -954,6 +959,7 @@ int dhcpc_request_async(FAR void *handle, dhcpc_callback_t callback)
     }
 
   pdhcpc->callback = callback;
+  pdhcpc->cancel   = 0;
   ret = pthread_create(&pdhcpc->thread, NULL, dhcpc_run, pdhcpc);
   if (ret != 0)
     {
